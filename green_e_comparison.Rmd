@@ -1,0 +1,92 @@
+---
+title: "Consumer choice for green power in the US: visualizing consumer choice availablilty by state using ggplot2 and maps packages in R"
+author: "Uni Lee"
+date: "9/24/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+library(dplyr)
+library(tidyr)
+library(maps)
+library(ggplot2)
+library(janitor)
+library(usmap)
+
+```
+
+# Market structures for electricity: regulated vs. deregulated
+
+In the US, electricity market structures differ by region. It is important to understand the differences in market structure because they affect how electricity is procured and the degree to which consumers have the right to choose where their electricity comes from. 
+
+A third of states in the US have *regulated* electricity markets, where utility companies operate as vertically integrated monopolies.  In regulated markets, retail electricity prices are overseen by state regulators, protecting consumers from high prices. But, consumers don't have any other choice. For example, if the utility provides high-carbon electricity, there is no way for the consumer to get renewable electricity for his or her consumption. 
+
+In *deregulated* markets, retail and wholesale markets for electricity are open for competition to independent power producers, while transmission systems are operated by independent system operators or regional transmission organizations (ISOs, RTOs). In deregulated markets, retail and wholesale electricity prices are determined by market forces. Here, energy consumers can choose their supplier according to their preference. For example, consumers can opt for a green power product that sources electricity from renewable sources. 
+
+Some markets have a *hybrid* structure. For example, in California, wholesale markets are deregulated, not not the retail market. This means that wholesale prices are determined by competition among independent power producers and demand for power. But consumers cannot choose from other suppliers, unless they hire a company to buy power in wholesale markets for them ([community choice aggregation](https://en.wikipedia.org/wiki/Community_Choice_Aggregation)). 
+
+
+# Map of consumer choice in electricity markets by state
+
+[Electric Choice](https://www.electricchoice.com/map-deregulated-energy-markets/) categorizes states into deregulated and regulated markets. Using the ggplot2 and maps package in R, I will visualize availability of consumer choice for electricity by state. 
+
+```{r}
+# Import electricity market structure data from Electric Choice (source: https://www.electricchoice.com/map-deregulated-energy-markets/).
+markets_raw <-  read.csv("Data/power_markets_us.csv")
+head(markets_raw)
+
+markets <- markets_raw %>% 
+  clean_names() %>%
+  select(state, electric) %>%
+  mutate(electric = case_when(
+            electric == "No" ~ "No Choice",
+            electric == "Yes" ~ "Consumer Choice",
+            electric == "Yes*" ~ "Limited Choice")) # Treat California as a regulated market
+  
+markets <- markets %>% 
+  mutate(electric=ifelse(markets$state %in% c("Washington DC", "Washington"), "Mixed", markets$electric)) %>% # Treat Washington as a mixed market
+  drop_na() 
+
+
+# Import US geography data to a dataframe for plotting 
+us_states <- map_data("state")
+
+# Merge market data and the geography by "region". 
+## First, we have to make sure that the values in the "region" column from two datasets match. We will lower all characters to do that. 
+markets$state <- tolower(markets$state)
+markets <- markets %>% rename(region = state)
+
+choice_data <- left_join(us_states, markets, by="region")
+head(choice_data)
+
+ggplot(data= choice_data,
+       aes(x=long, y=lat,
+           group=group,
+           fill=electric)) +
+  geom_polygon(color="gray90", size=0.1) + 
+  coord_map(projection="albers", lat0=39, lat1=45) + 
+  labs(title="Availability of consumer choice for green power by state") + 
+  theme_classic() + 
+  theme(legend.position = "bottom",
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        plot.title = element_text(hjust=0.5),
+        legend.title = element_blank()) 
+
+
+```
+
+# Voluntary green power market size by state
+
+**To-do: create a heatmap of voluntary green power generation by state and number of customers by state! 
+From NREL Geen Power Data_V2019
+
+References 
+
+Electric Choice. "Deregulated Energy Markets". https://www.electricchoice.com/map-deregulated-energy-markets/
+
+Cleary, K., Palmer, K. (2020). US Electricity Markets 101. Resources for the Future. https://media.rff.org/documents/US_Electricity_Markets_101.pdf
