@@ -16,6 +16,7 @@ library(janitor)
 library(usmap)
 library(ggrepel) # For labeling state names
 library(ggsn) # To scale map
+library(readxl)
 ```
 
 # Market structures for electricity: regulated vs. deregulated
@@ -96,10 +97,11 @@ ggplot(data= choice_data,
 # Voluntary green power market size by state
 
 **To-do: create a heatmap of voluntary green power generation by state and number of customers by state! 
-From NREL Geen Power Data_V2019
+From NREL Green Power Data_V2019
 
 ```{r}
-
+# Load data green power market data from NREL
+gp_gen <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=4, skip=4)
 ```
 
 
