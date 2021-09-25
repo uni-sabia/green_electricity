@@ -14,7 +14,8 @@ library(maps)
 library(ggplot2)
 library(janitor)
 library(usmap)
-
+library(ggrepel) # For labeling state names
+library(ggsn) # To scale map
 ```
 
 # Market structures for electricity: regulated vs. deregulated
@@ -57,15 +58,28 @@ us_states <- map_data("state")
 ## First, we have to make sure that the values in the "region" column from two datasets match. We will lower all characters to do that. 
 markets$state <- tolower(markets$state)
 markets <- markets %>% rename(region = state)
+## Adding regional abbreviation
+us_abb <- read.csv("Data/us_abb.csv") %>% rename(
+  region=State.Name, abb = USPS.Abbreviation) 
+us_abb$region <- tolower(us_abb$region)
+markets <- left_join(markets, us_abb, by="region")
 
+# Merging geographical and electricity choice datasets
 choice_data <- left_join(us_states, markets, by="region")
-head(choice_data)
+# Create a dataframe for labeling 
+label_dt <- choice_data %>% group_by(region) %>%
+  summarize(long=mean(range(long)), lat=mean(range(lat))) 
+label_dt <- left_join(label_dt, markets, by="region") 
 
+# Plot
 ggplot(data= choice_data,
-       aes(x=long, y=lat,
-           group=group,
-           fill=electric)) +
-  geom_polygon(color="gray90", size=0.1) + 
+       aes(x=long, y=lat, group=group,
+           fill=electric)) + 
+  geom_polygon(size=0.1) + 
+  geom_path(size=0.03) +  
+  geom_text(data=label_dt,
+                   aes(x=long, y=lat, group=region, label=abb),
+                   size=1.7, hjust=1) + 
   coord_map(projection="albers", lat0=39, lat1=45) + 
   labs(title="Availability of consumer choice for green power by state") + 
   theme_classic() + 
@@ -76,14 +90,18 @@ ggplot(data= choice_data,
         axis.text = element_blank(),
         plot.title = element_text(hjust=0.5),
         legend.title = element_blank()) 
-
-
+ 
 ```
 
 # Voluntary green power market size by state
 
 **To-do: create a heatmap of voluntary green power generation by state and number of customers by state! 
 From NREL Geen Power Data_V2019
+
+```{r}
+
+```
+
 
 References 
 
