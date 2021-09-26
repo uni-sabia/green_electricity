@@ -1,5 +1,5 @@
 ---
-title: "Consumer choice for green power in the US: visualizing consumer choice availablilty by state using ggplot2 and maps packages in R"
+title: "Visualizing green power market size and consumer choice by state using ggplot2 in R"
 author: "Uni Lee"
 date: "9/24/2021"
 output: html_document
@@ -12,40 +12,27 @@ library(dplyr)
 library(tidyr)
 library(maps)
 library(ggplot2)
-library(janitor)
-library(usmap)
+library(janitor) # To clean column names
 library(ggrepel) # For labeling state names
-library(ggsn) # To scale map
 library(readxl)
+library(ggpubr) # For putting plots together
+library(rmarkdown)
 ```
 
-# Market structures for electricity: regulated vs. deregulated
+# Mapping electricity market structures by state
 
-In the US, electricity market structures differ by region. It is important to understand the differences in market structure because they affect how electricity is procured and the degree to which consumers have the right to choose where their electricity comes from. 
-
-A third of states in the US have *regulated* electricity markets, where utility companies operate as vertically integrated monopolies.  In regulated markets, retail electricity prices are overseen by state regulators, protecting consumers from high prices. But, consumers don't have any other choice. For example, if the utility provides high-carbon electricity, there is no way for the consumer to get renewable electricity for his or her consumption. 
-
-In *deregulated* markets, retail and wholesale markets for electricity are open for competition to independent power producers, while transmission systems are operated by independent system operators or regional transmission organizations (ISOs, RTOs). In deregulated markets, retail and wholesale electricity prices are determined by market forces. Here, energy consumers can choose their supplier according to their preference. For example, consumers can opt for a green power product that sources electricity from renewable sources. 
-
-Some markets have a *hybrid* structure. For example, in California, wholesale markets are deregulated, not not the retail market. This means that wholesale prices are determined by competition among independent power producers and demand for power. But consumers cannot choose from other suppliers, unless they hire a company to buy power in wholesale markets for them ([community choice aggregation](https://en.wikipedia.org/wiki/Community_Choice_Aggregation)). 
-
-
-# Map of consumer choice in electricity markets by state
-
-[Electric Choice](https://www.electricchoice.com/map-deregulated-energy-markets/) categorizes states into deregulated and regulated markets. Using the ggplot2 and maps package in R, I will visualize availability of consumer choice for electricity by state. 
+Not every state has an open electricity market, where consumers can freely choose their electricity supplier. [Electric Choice](https://www.electricchoice.com/map-deregulated-energy-markets/) categorizes states into deregulated and regulated markets. Using the ggplot2 and maps package in R, I will visualize availability of consumer choice for electricity by state.
 
 ```{r}
 # Import electricity market structure data from Electric Choice (source: https://www.electricchoice.com/map-deregulated-energy-markets/).
 markets_raw <-  read.csv("Data/power_markets_us.csv")
-head(markets_raw)
-
 markets <- markets_raw %>% 
   clean_names() %>%
   select(state, electric) %>%
   mutate(electric = case_when(
-            electric == "No" ~ "No Choice",
-            electric == "Yes" ~ "Consumer Choice",
-            electric == "Yes*" ~ "Limited Choice")) # Treat California as a regulated market
+            electric == "No" ~ "Regulated",
+            electric == "Yes" ~ "Deregulated",
+            electric == "Yes*" ~ "Partially regulated")) # Treat California as a regulated market
   
 markets <- markets %>% 
   mutate(electric=ifelse(markets$state %in% c("Washington DC", "Washington"), "Mixed", markets$electric)) %>% # Treat Washington as a mixed market
@@ -63,24 +50,28 @@ markets <- markets %>% rename(region = state)
 us_abb <- read.csv("Data/us_abb.csv") %>% rename(
   region=State.Name, abb = USPS.Abbreviation) 
 us_abb$region <- tolower(us_abb$region)
+
 markets <- left_join(markets, us_abb, by="region")
 
 # Merging geographical and electricity choice datasets
-choice_data <- left_join(us_states, markets, by="region")
+choice_data <- left_join(us_states, markets, by="region") %>% drop_na(electric)
+
+rmarkdown::paged_table(choice_data)
+
 # Create a dataframe for labeling 
 label_dt <- choice_data %>% group_by(region) %>%
-  summarize(long=mean(range(long)), lat=mean(range(lat))) 
+  summarize(long=mean(range(long)), lat=mean(range(lat))) %>% na.omit() ## position of the labels are determined by taking the mean of long and lat. 
 label_dt <- left_join(label_dt, markets, by="region") 
 
 # Plot
-ggplot(data= choice_data,
+choice_map <- ggplot(data= choice_data,
        aes(x=long, y=lat, group=group,
            fill=electric)) + 
   geom_polygon(size=0.1) + 
   geom_path(size=0.03) +  
   geom_text(data=label_dt,
                    aes(x=long, y=lat, group=region, label=abb),
-                   size=1.7, hjust=1) + 
+                   size=2, hjust=1) + 
   coord_map(projection="albers", lat0=39, lat1=45) + 
   labs(title="Availability of consumer choice for green power by state") + 
   theme_classic() + 
@@ -91,19 +82,73 @@ ggplot(data= choice_data,
         axis.text = element_blank(),
         plot.title = element_text(hjust=0.5),
         legend.title = element_blank()) 
- 
+choice_map 
 ```
+
+The differences in structures of the electricity market is important because they affect how electricity is procured and the degree to which consumers can purchase low-carbon electricity. 
+
+A third of states in the US have *regulated* electricity markets, where utility companies operate as vertically integrated monopolies.  In regulated markets, retail electricity prices are overseen by state regulators, protecting consumers from high prices. The downside is that consumers can't choose their supplier. If the utility offers green pricing or green tariff programs, then consumers can opt for renewable electricity. If not, consumers don't have any other choice.  
+
+In *deregulated* markets, retail and wholesale markets for electricity are open for competition to independent power producers, while transmission systems are operated by independent system operators or regional transmission organizations (ISOs, RTOs). In deregulated markets, retail and wholesale electricity prices are determined by market forces. Here, energy consumers can choose their supplier according to their preference. For example, consumers can opt for a supplier that sources electricity only from renewable sources at different prices. 
+
+Some markets are *partially regulated*. For example, in California, wholesale markets are deregulated, while the retail market remains open only for a small number of consumers who opt for renewable energy through [direct access program](https://www.cpuc.ca.gov/industries-and-topics/electrical-energy/electric-costs/learn-more-about-costs-and-rates) or ([community choice aggregation](https://en.wikipedia.org/wiki/Community_Choice_Aggregation)). 
+
 
 # Voluntary green power market size by state
 
-**To-do: create a heatmap of voluntary green power generation by state and number of customers by state! 
-From NREL Green Power Data_V2019
+Since consumers have limited choice for renewable electricity, it is plausible to assume that voluntary green power markets are smaller in regulated markets than deregulated ones. After all, the market can grow only if consumers can express their willingness to pay in a free market, right?
+
+To test this assumption, I wrote the following code to draw a heatmap of the voluntary green power market sizes in the US by state. The market size can be expressed in terms of the number of customers and the amount of purchase (MWh), so there are two maps to see. 
+
+Resulting maps show that Texas has the biggest amount of green power electricity, whereas California has highest number of customers who voluntarily purchase green power. 
 
 ```{r}
 # Load data green power market data from NREL
-gp_gen <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=4, skip=4)
+gp_gen_raw <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=4, skip=4) %>% clean_names()
+gp_cus_raw <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=5, skip=4) %>% clean_names()
+
+gp_gen <- gp_gen_raw %>% select(state, tot_gen = total) # market size by generation
+gp_cus <- gp_cus_raw %>% select(state, tot_cus = total) # market size by number of customers
+gp <- merge(gp_gen, gp_cus, by="state") %>% rename(abb=state)
+
+paged_table(gp)
+
+mkt_data <- left_join(choice_data, gp, by="abb") # Add the new data to the dataset for mapping
+
+options(scipen=999) # Turn off scientific notation in the legend
+
+# Build a function for creating a map to save some code lines
+map_gp <- function(data, fill){
+  ggplot(data= data,
+       aes(x=long, y=lat, group=group)) +  
+  geom_polygon(aes(fill=fill)) + # fill goes to geom_polygon for continuous data
+  geom_path(size=0.03) +  
+  scale_fill_gradientn(colours = rev(heat.colors(10)),na.value = "grey90", 
+                       guide = guide_colourbar(barwidth = 25, barheight = 0.4,
+                                               title.position = "top")) +
+  geom_text(data=label_dt,
+                   aes(x=long, y=lat, group=region, label=abb),
+                   size=2, hjust=1) + 
+  coord_map(projection="albers", lat0=39, lat1=45) + 
+  labs(title= "Size of voluntary green power by state (MWh)") + 
+  theme_classic() + 
+  theme(legend.position = "bottom",
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        plot.title = element_text(hjust=0.5),
+        legend.title = element_blank()) 
+  }
+
+gen_map <- map_gp(data=mkt_data, fill=mkt_data$tot_gen)
+cus_map <- map_gp(data=mkt_data, fill=mkt_data$tot_cus)
+
+gen_map
+cus_map
 ```
 
+Looking at these maps, we cannot conclude whether electricity structure affects the size of green power markets. But, we can infer that large-scale energy consumers (i.e. IT companies) participate more actively in the green power market in Texas (deregulated market),  while small-to-medium scale energy consumers are more active in California (partially deregulated market).
 
 References 
 
