@@ -1,1 +1,1 @@
-# green_electricity
+This repository holds data exploration projects regarding green power products in the US. Results of the analysis can be found on Uni Lee's Concious Table : https://conscioustableblog.wordpress.com/category/data-analysis/
