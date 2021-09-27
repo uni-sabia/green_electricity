@@ -1,0 +1,143 @@
+---
+title: "Green power"
+author: "Uni Lee"
+date: "9/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(ggpubr)
+```
+
+# How fast has the voluntary green power market grown in the US? 
+
+Green power is hot. Over [300 major companies](https://www.there100.org/) have committed to using 100% renewable energy. Small-to-medium businesses and residential energy users are also looking for ways to buy renewable energy. 
+
+To see how the rising demand for renewable energy actually looks like, I will analyze US Volutary Green Power Market Data from 2010 to 2019, provided by [National Renewable Energy Laboratory](https://data.nrel.gov/submissions/151). 
+
+Growth of voluntary renewable energy procurement is truly a global phenomenon. But I chose the US for my analysis because different electricity market structures coexist, whereas Europe only has deregulated markets. You can read more about electricity market structures in my previous post. _Thank you NREL, for making this wonderful dataset publicly available!_ 
+
+```{r}
+# Load data 
+# Heeter, Jenny; O'Shaughnessy, Eric (2020): U.S. Voluntary Green Power Market Data 2019. National Renewable Energy Laboratory. https://data.nrel.gov/submissions/151
+
+gp_raw <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=3, skip=2) %>% clean_names()
+
+# Plot growth of green power market by sales and number of customers
+sales <- ggplot(gp_raw, aes(x=factor(year), y= sales_million_m_wh, group=segment, fill=segment)) + 
+  geom_area() + 
+  theme_classic() +
+  theme(legend.position="right",
+        axis.title.x = element_blank(),
+        legend.title = element_blank()) + 
+  labs(y = "Sales in Million MWh",
+       title="US Green Power Market Size",
+       subtitle="in terms of sales (MWh)") +
+  scale_fill_manual(values=c("#E69F00", "#56B4E9", "#009E73", "#F0E442", 
+                      "#0072B2","#D55E00")) 
+cust <- ggplot(gp_raw, aes(x=factor(year), y= customers_x1000, group=segment, fill=segment)) + 
+  geom_area() + 
+  theme_classic() +
+  theme(legend.position="right",
+        axis.title.x = element_blank(),
+        legend.title = element_blank()) + 
+  labs(y = "Number of customers (x1000)", 
+       title="US Green Power Market Size",
+       subtitle="in terms of customers") +
+  scale_fill_manual(values=c("#E69F00", "#56B4E9", "#009E73", "#F0E442", 
+                      "#0072B2","#D55E00"))
+
+sales 
+cust
+```
+
+The US voluntary green power market in 2019 was FOUR times higher than 2010, both in terms of sales and number of customers. I mean, we are talking about a growth rate of 330%! 
+
+The growth of unbundled REC sales and Power Purchase Agreements (PPA) is outstanding. PPAs are considered to be the most desirable procurement method, since they assure additionality and decrease investment risks for renewable energy producers. They can help companies save energy pill as well! But, they are only possible in fully liberalized markets (one third of states) and for large-scale consumers. So, energy consumers were trying to find indirect ways to fulfill their commitment to renewable energy. This is reflected in the increase in sales of unbundled RECs.
+
+Another outstanding point is the increase in the number of customers who are procuring through community choice aggregation. Community choice aggregation (CCA) is available in fully liberalized markets and California. CCA reflects the rising demand among small-scale energy consumers. That's why their overall sales volume is small. PPAs are not visible on this graph because they are for a few large-scale green power frontiers, such as Amazon, Apple and Google (there are more, of course). 
+
+
+# Do liberalized electricity markets have bigger green power markets? 
+
+As we discussed in the previous blog, electricity market structure affects the degree to which consumers procure renewable electricity. I would assume that fully liberalized power markets have bigger green power markets because consumers have more procurement options. 
+
+Let us group the data by electricity market structure and see if 1) deregulated markets have higher market growth than regulated ones, and 2) which procurement methods are most prominent for each market structure. 
+
+```{r}
+# Market structure data
+markets_raw <-  read.csv("Data/power_markets_us.csv")
+markets <- markets_raw %>% 
+  clean_names() %>%
+  select(state, electric) %>%
+  mutate(electric = case_when(
+            electric == "No" ~ "Regulated",
+            electric == "Yes" ~ "Deregulated",
+            electric == "Yes*" ~ "Partially deregulated")) %>%
+  drop_na() %>%
+  mutate(state=
+           ifelse(state=="Washington DC", "district of columbia", state)) %>%
+  mutate(state=tolower(state))
+
+# US State names and abbreviations (built-in vectors in R)
+us_abb <- tibble(state.name, state.abb) %>% 
+  mutate(state.name=tolower(state.name)) %>%
+  rename(state=state.name, abb=state.abb)
+dc <- c("district of columbia", "DC") # Add DC to the list
+us_abb <- rbind(us_abb, dc)
+
+# Merge them together
+markets_abb <- left_join(markets,us_abb, by="state")
+
+# Load NREL voluntary green power data by state and procurement methods
+gp_gen_raw <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=4, skip=4) %>%
+  rename(abb=State) %>% 
+  select(-Total)
+
+gp_gen_long <- gp_gen_raw %>% pivot_longer(
+  cols=`Utility Green Pricing`:PPAs,
+  names_to="procure_type",
+  values_to = "gen_mwh")
+
+gp_cus_raw <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=5, skip=4) %>%
+  rename(abb=State) %>% 
+  select(-Total)
+
+gp_cus_long <- gp_cus_raw %>% pivot_longer(
+  cols=`Utility Green Pricing`:PPAs,
+  names_to="procure_type",
+  values_to = "num_customer")
+
+# Merge generation and number of customers
+options(scipen=999)
+gp_all <- left_join(gp_gen_long, gp_cus_long, by=c("abb", "procure_type"))
+
+# Add market structure data
+gp_everything <- left_join(gp_all, markets_abb, by="abb")
+
+# Summarize data by market structure
+mkt <- gp_everything %>% group_by(electric, procure_type) %>%
+  summarise(gen_mwh = sum(gen_mwh, na.rm=TRUE),
+            num_customer = sum(num_customer, na.rm=TRUE))
+
+# To order bars
+mkt$electric <- factor(mkt$electric, levels=c("Regulated", "Deregulated", "Partially deregulated"))
+ggplot(data=mkt, aes(x=electric, y=gen_mwh/1000, fill=procure_type)) +
+  geom_bar(stat="identity") + 
+    scale_fill_manual(values=c("#E69F00", "#56B4E9", "#009E73", "#F0E442", 
+                      "#0072B2","#D55E00")) + 
+  theme_light() + 
+    theme(axis.title.x = element_blank(),
+        legend.title = element_blank()) +
+  labs(y="GWh",
+       title="Green power procurement in 2019",
+       subtitle="by market structure and procurement type") 
+```
+

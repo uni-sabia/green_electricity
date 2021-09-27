@@ -32,12 +32,10 @@ markets <- markets_raw %>%
   mutate(electric = case_when(
             electric == "No" ~ "Regulated",
             electric == "Yes" ~ "Deregulated",
-            electric == "Yes*" ~ "Partially regulated")) # Treat California as a regulated market
-  
-markets <- markets %>% 
-  mutate(electric=ifelse(markets$state %in% c("Washington DC", "Washington"), "Mixed", markets$electric)) %>% # Treat Washington as a mixed market
-  drop_na() 
-
+            electric == "Yes*" ~ "Partially regulated")) %>%
+  drop_na() %>% 
+  mutate(state=
+         ifelse(state=="Washington DC", "district of columbia", state)) # Recode state name to match map data
 
 # Import US geography data to a dataframe for plotting 
 us_states <- map_data("state")
@@ -47,9 +45,11 @@ us_states <- map_data("state")
 markets$state <- tolower(markets$state)
 markets <- markets %>% rename(region = state)
 ## Adding regional abbreviation
-us_abb <- read.csv("Data/us_abb.csv") %>% rename(
-  region=State.Name, abb = USPS.Abbreviation) 
+us_abb <- tibble(state.name, state.abb) %>% rename(
+  region=state.name, abb=state.abb) 
 us_abb$region <- tolower(us_abb$region)
+dc <- c("district of columbia", "DC") # Add DC to the list
+us_abb <- rbind(us_abb, dc)
 
 markets <- left_join(markets, us_abb, by="region")
 
@@ -69,9 +69,9 @@ choice_map <- ggplot(data= choice_data,
            fill=electric)) + 
   geom_polygon(size=0.1) + 
   geom_path(size=0.03) +  
-  geom_text(data=label_dt,
+  geom_text_repel(data=label_dt,
                    aes(x=long, y=lat, group=region, label=abb),
-                   size=2, hjust=1) + 
+                   size=2, hjust=0.45, vjust=0.6) + 
   coord_map(projection="albers", lat0=39, lat1=45) + 
   labs(title="Availability of consumer choice for green power by state") + 
   theme_classic() + 
@@ -130,7 +130,6 @@ map_gp <- function(data, fill){
                    aes(x=long, y=lat, group=region, label=abb),
                    size=2, hjust=1) + 
   coord_map(projection="albers", lat0=39, lat1=45) + 
-  labs(title= "Size of voluntary green power by state (MWh)") + 
   theme_classic() + 
   theme(legend.position = "bottom",
         axis.ticks = element_blank(),
@@ -141,8 +140,10 @@ map_gp <- function(data, fill){
         legend.title = element_blank()) 
   }
 
-gen_map <- map_gp(data=mkt_data, fill=mkt_data$tot_gen)
-cus_map <- map_gp(data=mkt_data, fill=mkt_data$tot_cus)
+gen_map <- map_gp(data=mkt_data, fill=mkt_data$tot_gen) + 
+    labs(title= "Size of voluntary green power by state (MWh)") 
+cus_map <- map_gp(data=mkt_data, fill=mkt_data$tot_cus) + 
+    labs(title= "Size of voluntary green power by state (# of customers)") 
 
 gen_map
 cus_map
