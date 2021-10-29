@@ -1,0 +1,50 @@
+---
+title: "Cleaning and merging various datasets on US electricity production"
+author: "Uni Lee"
+date: "10/29/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyverse)
+library(janitor)
+library(readxl)
+```
+
+# Collecting various datasets on US electricity
+
+I am writing my thesis on green power markets in the United States. My hypothesis is that the green power electricity sales increased the share of renewable energy in the US. To test my hypothesis, I would like to do a multivariate regression analysis, controlling for variables that affect growth of renewables: income,  electricity market structure, cost competitiveness of renewables, renewable energy support schemes.
+
+Of course, there is no perfect dataset that is ready for analysis. So I had to hunt for data from various sources. This is what I've harvested:
+
+* EIA. (2021): Net Generation by State by Type of Producer by Energy Source 1990-2020. US Energy Information Administration. https://www.eia.gov/electricity/data/state/
+
+```{r}
+net_gen_raw <- read_xlsx("Data/annual_generation_state.xlsx", skip=1) %>% clean_names() # in MWh
+```
+
+* Heeter, Jenny; O'Shaughnessy, Eric (2020): U.S. Voluntary Green Power Market Data 2019. National Renewable Energy Laboratory []. https://data.nrel.gov/submissions/151
+
+```{r}
+# Historical data (no state-by-state data)
+gp_historical_raw <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=2, skip=2) %>% clean_names()
+
+# Voluntary Green Power Generation (MWh) by State
+gp_2019_gen_raw <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=4, skip=4) %>% clean_names()
+```
+
+# How strongly are green power sales and renewable energy generation correlated? 
+
+The state-by-state generation data are broken down to provider-level. 
+
+```{r}
+
+```
+
+
+```{r}
+corr(gp_historical_raw$sales_million_m_wh, )
+```
+
