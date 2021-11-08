@@ -1,0 +1,40 @@
+---
+title: "Electricity rates_EIA"
+author: "Uni Lee"
+date: "10/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+library(tidyverse)
+library(dplyr)
+library(rvest)
+```
+
+#EIA State Electricity Profile Data (2019) 
+
+Average electricity price by state
+
+```{r}
+url <- "https://www.eia.gov/electricity/state/"
+ccs <- "td"
+
+content <- url %>% 
+  read_html() %>%
+  html_nodes(ccs) %>%
+  html_text()
+  
+# Clean data
+
+content_nospace <- str_trim(content)
+elec_price <- matrix(content_nospace, ncol=5, byrow=TRUE) %>%
+  as.data.frame() 
+names(elec_price) <- c("state", "ave_pr_ct_kwh", "net_cap_mw", "net_gen_mwh", "retail_sales_mwh")
+
+```
+
+
+
+

@@ -1,0 +1,64 @@
+---
+title: "Renewable Electricity Procurement Options Data (RE-POD)"
+author: "Uni Lee"
+date: "10/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(janitor)
+library(ggplot2)
+library(ggpubr)
+```
+
+# Renewable Electricity Procurement Options Data (RE-POD)
+
+The Renewable Electricity Procurement Options Data (RE-POD) is an aggregated dataset meant to help local jurisdictions and utility customers within those jurisdictions understand the options that may be available to them to procure renewable electricity or renewable energy credits and meet energy goals.
+
+```{r}
+gp_raw <- read_xlsx("Data/renewableelectricityprocurementoptionsdatarepod.xlsx", sheet=3) %>% clean_names()
+nrow(gp_raw)
+names(gp_raw)
+```
+0. Summary 
+
+```{r}
+choice <- gp_raw %>%
+  summarize(partial = sum(partial_retail_choice),
+            full = sum(full_retail_choice)) %>%
+  mutate(none = nrow(gp_raw)-choice$partial - choice$full)
+choice
+
+util <- gp_raw %>%
+  group_by(utility_name) %>%
+  summarize(
+    cca = sum(community_choice_aggregator),
+    commu_solar = sum(community_solar),
+    green_tariff = sum(green_tariff),
+    unbundled_recs = sum(unbundled_recs),
+  )
+
+
+```
+
+
+1. Which utility does not have a full utility choice? 
+
+```{r}
+ca_util <- gp_raw %>% filter(state_abbr=="CA")
+unique(ca_util$utility_name)
+```
+
+2. Who uses unbundled RECs? 
+
+```{r}
+recs <- gp_raw %>% filter(unbundled_recs==1)
+nrow(recs)/nrow(gp_raw) # Everybody!
+```
+
+
