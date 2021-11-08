@@ -7,10 +7,12 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(dplyr)
+library(dplyr) 
 library(tidyverse)
 library(janitor)
 library(readxl)
+`!%in%` <- Negate(`%in%`)
+options(scipen=999)
 ```
 
 # Collecting various datasets on US electricity
@@ -19,10 +21,16 @@ I am writing my thesis on green power markets in the United States. My hypothesi
 
 Of course, there is no perfect dataset that is ready for analysis. So I had to hunt for data from various sources. This is what I've harvested:
 
-* EIA. (2021): Net Generation by State by Type of Producer by Energy Source 1990-2020. US Energy Information Administration. https://www.eia.gov/electricity/data/state/
+* EIA. (2021). Electricity Sales to Ultimate Customers by State by Sector by Provider (EIA-861). US Energy Information Administration]https://www.eia.gov/electricity/data/state/
 
 ```{r}
-net_gen_raw <- read_xlsx("Data/annual_generation_state.xlsx", skip=1) %>% clean_names() # in MWh
+net_sales_raw <- read.csv("Data/sales_annual_bystate.csv", skip=1) %>% clean_names() # in MWh
+```
+
+* EIA. (2021): Existing Nameplate and Net Summer Capacity by Energy Source, Producer Type and State, 1990-2020 . US Energy Information Administration. https://www.eia.gov/electricity/data/state/
+
+```{r}
+net_capa_raw <- read.csv("Data/existcapacity_annual.csv", skip=1) %>% clean_names() # in MWh
 ```
 
 * Heeter, Jenny; O'Shaughnessy, Eric (2020): U.S. Voluntary Green Power Market Data 2019. National Renewable Energy Laboratory []. https://data.nrel.gov/submissions/151
@@ -31,20 +39,82 @@ net_gen_raw <- read_xlsx("Data/annual_generation_state.xlsx", skip=1) %>% clean_
 # Historical data (no state-by-state data)
 gp_historical_raw <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=2, skip=2) %>% clean_names()
 
-# Voluntary Green Power Generation (MWh) by State
+# Voluntary Green Power Sales (MWh) by State 
 gp_2019_gen_raw <- read_xlsx("Data/NREL_Green_Power_Data_v2019.xlsx", sheet=4, skip=4) %>% clean_names()
 ```
 
-# How strongly are green power sales and renewable energy generation correlated? 
+# Calculating the share of green power sales in US electricity sales
 
-The state-by-state generation data are broken down to provider-level. 
+The EIA dataset on US electricity generation is broken down into states and energy source. We will summarize this dataset at US level, by year. Then, we merge it with NREL green power dataset to calculate share of green power sales.
 
 ```{r}
+net_sales_us <- net_sales_raw %>% 
+  filter(state=="US", industry_sector_category == "Total Electric Industry", year >= 2010) %>%
+  select(year, total) 
+         
+net_sales_us$total <- as.numeric(gsub(",","",net_sales_us$total))
 
+compare_sales <- merge(net_sales_us, gp_historical_raw, by="year")
+
+# Calculate shares
+compare_sales <- compare_sales %>% 
+  mutate(gp_sale=sales_million_m_wh*1000000) %>%
+  mutate(share=round(gp_sale/total*100,2)) %>%
+  select(year, share)
+compare_sales
 ```
 
+# Capacity additions by state and by year
+
+Next, we can calculate annual renewable energy capacity addition using the dataset for existing capacity. We can use `lag()` function to create lag values to calculate the annual difference. 
 
 ```{r}
-corr(gp_historical_raw$sales_million_m_wh, )
+# Getting the data types right
+net_capa_raw$nameplate_capacity_megawatts <- as.numeric(gsub(",","",net_capa_raw$nameplate_capacity_megawatts))
+
+net_capa_tot <- net_capa_raw %>% filter(year>=2009, producer_type=="Total Electric Power Industry",
+                                        fuel_source %in% c("Wind", "Solar Thermal and Photovoltaic", "Geothermal")) %>% 
+  select(year, state_code, fuel_source, capacity = nameplate_capacity_megawatts) %>%
+  group_by(year, state_code) %>%
+  summarize(capacity=sum(capacity))
+net_capa_tot
+```
+
+# Correlation between green power sales and RE capacity by US state
+
+```{r}
+net_capa_2019 <- net_capa_tot %>% filter(year==2019) %>% rename(state=state_code)
+re_go_2019 <- merge(net_capa_2019, gp_2019_gen_raw, by=c("state"))
+cor(re_go_2019$capacity, re_go_2019$total)
+
+ggplot(re_go_2019, aes(x=total, y=capacity)) + geom_point() + geom_smooth() +  
+  theme_minimal() +
+  labs(title= "Green power sales vs. RE capacity by US state",
+       x="Green power sales (MWh)", y="RE Capacity")
+```
+
+# Comparison of green power sales and RE additions 2010-2019 (US total)
+
+```{r}
+net_capa_us <- net_capa_tot %>% group_by(year) %>%
+  summarize(capacity_re = sum(capacity)) %>%
+  mutate(cap_lag = lag(capacity_re),
+         cap_add = capacity_re-cap_lag) %>%
+  filter(year >= 2010)
+
+re_gp_us <- merge(net_capa_us, gp_historical_raw, by="year") 
+
+cor(re_gp_us$capacity_re, re_gp_us$sales_million_m_wh)
+
+ggplot(re_gp_us, aes(x=sales_million_m_wh, y=capacity_re)) +
+  geom_point() + geom_smooth() + 
+  labs(title= "Relationship between 2019 Green power sales vs. RE capacity by year",
+       x="Green power sales (milion MWh)", y="RE Capacity (MW)") 
+
+ggplot(re_gp_us, aes(x=sales_million_m_wh, y=cap_add)) +
+  geom_point() + geom_smooth() + 
+  labs(title= "Relationship between US Green power sales vs. Annual RE capacity addition by year",
+       x="Green power sales (milion MWh)", y="Annual RE Capacity addition (MW)") + theme_void()
+
 ```
 
