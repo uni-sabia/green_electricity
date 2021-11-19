@@ -36,6 +36,7 @@ long_2017 <- gp_2017 %>% pivot_longer(cols=`Utility Green Pricing`:PPAs,
                          values_to = "MWh") %>%
   mutate(Year=2017) %>% select(State, Year, Sourcing, MWh)
 
+
 long_2019 <- gp_2019 %>% pivot_longer(cols=`Utility Green Pricing`:PPAs,
                          names_to = "Sourcing",
                          values_to = "MWh") %>%
@@ -50,10 +51,17 @@ gp_all <- full_join(full_join(long_2017, long_2019), long_2020)
 
 ppa <- gp_all %>% filter(Sourcing=="PPAs")
 
-control <- ppa %>% filter(MWh < 1000)
-treatment <- ppa %>% filter(MWh >= 1000)
+control_sub <- ppa %>% filter(Year == 2020 & MWh < 100)
+control_states <- control_sub$State
 
-ggplot(treatment, aes(x=factor(Year), y=MWh)) + geom_line() +
+`%!in%` <- Negate(`%in%`)
+control <- ppa %>% filter(State %in% control_states)
+treatment <- ppa %>% filter(State %!in% control_states)
+
+
+ggplot(control, aes(x=factor(Year), y=MWh)) + geom_point() +
+         facet_wrap(~State)
+ggplot(treatment, aes(x=factor(Year), y=MWh)) + geom_point() +
          facet_wrap(~State)
 
 ggplot(control, aes(x=factor(Year), y=MWh, fill=State)) + geom_bar(stat="identity", position="dodge") 
@@ -61,4 +69,9 @@ ggplot(control, aes(x=factor(Year), y=MWh, fill=State)) + geom_bar(stat="identit
 control_states <- unique(control$State)
 treatment_states <- unique(control$State)
 
- ```
+```
+ 
+```{r}
+
+```
+
