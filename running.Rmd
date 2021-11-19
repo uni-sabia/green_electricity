@@ -49,6 +49,11 @@ long_2020 <- gp_2020 %>% pivot_longer(cols=`Utility Green Pricing`:PPAs,
 
 gp_all <- full_join(full_join(long_2017, long_2019), long_2020)
 
+nv_ca <- gp_all %>% filter(State %in% c("CA", "NV"))
+
+ggplot(nv_ca, aes(x=factor(Year), y=MWh), fill="Sourcing") + geom_line() +
+  facet_wrap(~State)
+
 ppa <- gp_all %>% filter(Sourcing=="PPAs")
 
 control_sub <- ppa %>% filter(Year == 2020 & MWh < 100)
@@ -72,6 +77,15 @@ treatment_states <- unique(control$State)
 ```
  
 ```{r}
+net_capa_raw <- read.csv("Data/existcapacity_annual.csv", skip=1) %>% clean_names() # in MWh
 
+net_capa_raw$nameplate_capacity_megawatts <- as.numeric(gsub(",","",net_capa_raw$nameplate_capacity_megawatts))
+
+net_capa_tot <- net_capa_raw %>% filter(year>=2009, producer_type=="Total Electric Power Industry",
+                                        fuel_source %in% c("Wind", "Solar Thermal and Photovoltaic", "Geothermal")) %>% 
+  select(year, state_code, fuel_source, capacity = nameplate_capacity_megawatts) %>%
+  group_by(year, state_code) %>%
+  summarize(capacity=sum(capacity))
+net_capa_tot
 ```
 
