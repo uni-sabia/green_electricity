@@ -15,8 +15,26 @@ library(janitor)
 library(ggplot2)
 library(ggpubr)
 ```
+# State RE capacity addition
 
-# Finding a running variable, control vs. treatment groups 
+* EIA. (2021): Existing Nameplate and Net Summer Capacity by Energy Source, Producer Type and State, 1990-2020 . US Energy Information Administration. https://www.eia.gov/electricity/data/state/
+
+```{r}
+
+net_capa_raw <- read.csv("Data/existcapacity_annual.csv", skip=1) %>% clean_names() # in MWh
+
+net_capa_raw$nameplate_capacity_megawatts <- as.numeric(gsub(",","",net_capa_raw$nameplate_capacity_megawatts))
+
+net_capa_tot <- net_capa_raw %>% filter(year>=2009, producer_type=="Total Electric Power Industry",
+                                        fuel_source %in% c("Wind", "Solar Thermal and Photovoltaic")) %>% 
+  select(year, state_code, fuel_source, capacity = nameplate_capacity_megawatts) %>%
+  group_by(year, state_code) %>%
+  summarize(capacity=sum(capacity))
+net_capa_tot
+```
+
+
+# State green power record  
 
 ```{r}
 # Load data 
@@ -49,43 +67,55 @@ long_2020 <- gp_2020 %>% pivot_longer(cols=`Utility Green Pricing`:PPAs,
 
 gp_all <- full_join(full_join(long_2017, long_2019), long_2020)
 
-nv_ca <- gp_all %>% filter(State %in% c("CA", "NV"))
+```
 
-ggplot(nv_ca, aes(x=factor(Year), y=MWh), fill="Sourcing") + geom_line() +
-  facet_wrap(~State)
+# DiD: looking for a state similar to California
 
-ppa <- gp_all %>% filter(Sourcing=="PPAs")
+NREL's 3010 Renewable Energy Technical Potential implies that Colorado has similar renewable energy (solar and wind combined) potential as California. Until 2010, Colorado and California both had regulated electricity markets. In 2010, Community choice aggregation and Direct Access were introduced in California, while keeping the rest of the market regulated. Colorado remained fully regulated, with no direct PPA records to this day. Consumers can only choose green pricing programs provided by conventional utilities (such as Xcel Energy or Black Hills Energy, or municipal utilities. 
 
-control_sub <- ppa %>% filter(Year == 2020 & MWh < 100)
-control_states <- control_sub$State
+```{r}
+co_ca <- gp_all %>% filter(State %in% c("CA", "CO"))
+
+ggplot(co_ca, aes(x=Year, y=MWh)) +
+  geom_area(aes(fill=Sourcing)) +
+  facet_wrap(~State) + theme_classic() +
+  theme(legend.position="bottom")
+```
+```{r}
+co_ca_re_cap <- net_capa_tot %>% filter(state_code %in% c("CA", "CO"))
+
+ggplot(co_ca_re_cap, aes(x=factor(year), y=capacity, group=state_code)) + 
+  geom_line(aes(color=state_code)) +  theme_minimal() +
+  theme(axis.title.x=element_blank())+
+  labs(y="Solar and Wind Capacity in MW")
+```
+
+
+2. Fixed Effects: finding control and treatment groups 
+
+```{r}
+direct <- gp_all %>% filter(Sourcing %in% c("PPAs", "CCAs", "Utility Renewable Contracts"))
+
+direct_tot <- direct %>% group_by(State, Year) %>%
+  summarize(GP = sum(MWh))
+
+control_sub <- direct_tot %>% filter(GP < 50000)
+control_states <- unique(control_sub$State)
 
 `%!in%` <- Negate(`%in%`)
-control <- ppa %>% filter(State %in% control_states)
-treatment <- ppa %>% filter(State %!in% control_states)
+control <- direct_tot %>% filter(State %in% control_states)
+treatment <- direct_tot %>% filter(State %!in% control_states)
 
+unique(control$State)
+unique(treatment$State)
 
-ggplot(control, aes(x=factor(Year), y=MWh)) + geom_point() +
+ggplot(control, aes(x=factor(Year), y=GP)) + geom_point() +
          facet_wrap(~State)
-ggplot(treatment, aes(x=factor(Year), y=MWh)) + geom_point() +
+ggplot(treatment, aes(x=factor(Year), y=GP)) + geom_point() +
          facet_wrap(~State)
 
-ggplot(control, aes(x=factor(Year), y=MWh, fill=State)) + geom_bar(stat="identity", position="dodge") 
+ggplot(control, aes(x=factor(Year), y=GP, fill=State)) + geom_bar(stat="identity", position="dodge") 
 
-control_states <- unique(control$State)
-treatment_states <- unique(control$State)
 
-```
- 
-```{r}
-net_capa_raw <- read.csv("Data/existcapacity_annual.csv", skip=1) %>% clean_names() # in MWh
-
-net_capa_raw$nameplate_capacity_megawatts <- as.numeric(gsub(",","",net_capa_raw$nameplate_capacity_megawatts))
-
-net_capa_tot <- net_capa_raw %>% filter(year>=2009, producer_type=="Total Electric Power Industry",
-                                        fuel_source %in% c("Wind", "Solar Thermal and Photovoltaic", "Geothermal")) %>% 
-  select(year, state_code, fuel_source, capacity = nameplate_capacity_megawatts) %>%
-  group_by(year, state_code) %>%
-  summarize(capacity=sum(capacity))
-net_capa_tot
 ```
 
