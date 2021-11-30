@@ -25,7 +25,7 @@ net_capa_raw <- read.csv("Data/existcapacity_annual.csv", skip=1) %>% clean_name
 
 net_capa_raw$nameplate_capacity_megawatts <- as.numeric(gsub(",","",net_capa_raw$nameplate_capacity_megawatts))
 
-net_capa_tot <- net_capa_raw %>% filter(year>=2009, producer_type=="Total Electric Power Industry",
+net_capa_tot <- net_capa_raw %>% filter(year>=2000, producer_type=="Total Electric Power Industry",
                                         fuel_source %in% c("Wind", "Solar Thermal and Photovoltaic")) %>% 
   select(year, state_code, fuel_source, capacity = nameplate_capacity_megawatts) %>%
   group_by(year, state_code) %>%

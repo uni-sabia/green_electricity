@@ -1,0 +1,93 @@
+---
+title: "Global Power Plant Database WRI"
+author: "Uni Lee"
+date: "11/29/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr) 
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(ggmap) # To match geocoordinates to municipalities 
+library(revgeo)
+library(tidygeocoder)
+
+`!%in%` <- Negate(`%in%`)
+options(scipen=999)
+```
+
+Gathering high-resolution power capacity data my aggregating power-plant level data from WRI. 
+
+```{r}
+ppt <- read.csv("Data/global_power_plant_database_v_1_3/global_power_plant_database.csv") 
+
+ppt_us <- ppt %>% 
+  select(country, name, capacity_mw, latitude, longitude, primary_fuel, other_fuel1, other_fuel2, other_fuel3, commissioning_year, owner) %>%
+  filter(country=="USA")
+ppt_re_us <- ppt_us %>% filter(
+  primary_fuel %in% c("Solar","Wind"))
+
+us_solar_wind <- read.csv("Data/us_re.csv") 
+
+
+
+
+#ppt_re_ct <- ppt_re_us %>%
+#  mutate(
+  #  county = reverse_geocode(ppt_re_us,
+   #             latitude,
+    #            longitude,
+     #           return_input=FALSE,
+      #          method="osm",
+       #         full_results=TRUE
+        #        )$county
+    #)
+```
+
+Power plants by year of commissioning (= new capacity of that year)
+
+```{r}
+# All states and counties
+us_re_agg <- us_solar_wind %>% group_by(start_yr, state, county) %>%
+  summarise(re_cap = sum(capacity_mw)) 
+
+# CA and CO
+us_re_coca <- us_re_agg %>% filter(
+  state %in% c("California", "Colorado")
+) %>% filter(start_yr > 1999) 
+
+ggplot(us_re_coca, aes(x=start_yr, y=re_cap, fill=state)) +
+  geom_bar(stat="identity", position="dodge")
+```
+=> We can't use this data because it does not include decomissioned power plant data. 
+# State RE capacity addition
+
+* EIA. (2021): Existing Nameplate and Net Summer Capacity by Energy Source, Producer Type and State, 1990-2020 . US Energy Information Administration. https://www.eia.gov/electricity/data/state/
+
+```{r}
+
+net_capa_raw <- read.csv("Data/existcapacity_annual.csv", skip=1) %>% clean_names() # in MWh
+
+net_capa_raw$nameplate_capacity_megawatts <- as.numeric(gsub(",","",net_capa_raw$nameplate_capacity_megawatts))
+
+net_capa_tot <- net_capa_raw %>% filter(year>=2000, producer_type=="Total Electric Power Industry",
+                                        fuel_source %in% c("Wind", "Solar Thermal and Photovoltaic")) %>% 
+  select(year, state_code, fuel_source, capacity = nameplate_capacity_megawatts) %>%
+  group_by(year, state_code) %>%
+  summarize(capacity=sum(capacity))
+net_capa_tot
+
+coca <- net_capa_tot %>% filter(state_code %in% c("CO", "CA"))
+
+ggplot(coca, aes(x=year, y=capacity, color=state_code)) + geom_line() + 
+  theme_bw()
+```
+Calculate annual capacity from powerplant data
+
+```{r}
+
+```
+
